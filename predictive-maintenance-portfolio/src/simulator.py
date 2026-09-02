@@ -73,7 +73,7 @@ def _simulate_one(
     hvac_fail = np.zeros(n_minutes, dtype=bool)
     for _ in range(max(1, n_minutes // 2000)):
         s = rng.integers(0, max(1, n_minutes - 120))
-        hvac_fail[s : s + rng.integer(40, 120)] = True
+        hvac_fail[s : s + rng.integers(40, 120)] = True
     air = air + 5.5 * hvac_fail
 
     # 공정 온도 = 공기온도 + 절삭열(전력) + 마모분
@@ -136,7 +136,10 @@ def _simulate_one(
 
 # 오염 없는 참값을 생성하기 위한 함수 생성
 def simulate_truth(
-    n_minutes: int = 1440, start: str | pd.Timestamp = "2026-09-02", seed: int = 42
+    # 시뮬레이션 총 분, 시작하는 날(시각), 난수 시드
+    n_minutes: int = 1440,
+    start: str | pd.Timestamp = "2026-09-02",
+    seed: int = 42,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     start = pd.Timestamp(start)
@@ -144,3 +147,6 @@ def simulate_truth(
     out = pd.concat(parts, ignore_index=True)
     # 참값 생성 후 인덱스 번호 재정립
     return out.sort_values(["ts", "machine_id"]).reset_index(drop=True)
+
+
+print(_simulate_one("CNC-01", 1440, "2026-09-02 12:00", np.random.default_rng(seed=7)))
