@@ -32,12 +32,13 @@ POLLUTION = {
 }
 
 
+# 첫 번째 시뮬레이션용 함수
 def _simulate_one(
     # rng: np.random.Generator => 'np.random.default_rng(seed=42)'으로 값 전달
-    machine_id: str,
-    n_minutes: int,
-    start: pd.Timestamp,
-    rng: np.random.Generator,
+    machine_id: str,  # 설비 번호
+    n_minutes: int,  # 분 단위
+    start: pd.Timestamp,  # 시작 시간
+    rng: np.random.Generator,  # 난수 생성기
 ) -> pd.DataFrame:
     spec = MACHINES[machine_id]  # 설비 스펙
     ts = pd.date_range(start, periods=n_minutes, freq="min")
@@ -200,3 +201,83 @@ print(truth[cols].describe().loc[["mean", "std", "min", "50%", "max"]].round(2))
 
 pd.date_range("2024-01-01", periods=10, freq="min")
 # => pandas 최신 버전 적용
+
+# 실제 현장급 오염 주입
+SENSOR_COLS = [
+    "air_temp_k",
+    "process_temp_k",
+    "rot_speed_rpm",
+    "torque_nm",
+    "tool_wear_min",
+    "vibration_mms",
+    "current_a",
+    "humidity_pct",
+]
+
+
+# 오염 데이터용 함수
+def pollute(truth, seed=7, cfg=None, return_masks=False):
+    c = dict(POLLUTION)
+    if cfg:
+        c.update(cfg)
+    rng = np.random.default_rng(seed)
+    df = truth.copy()
+    masks = pd.DataFrame(index=df.index)  # 주입 정답지
+
+    # 현장에서도 세부 고장코드는 정비 후에 붙는다
+    df = df.droop(columns=["twf", "hdf", "pwf", "osf", "rnf", "power_w"])
+
+    t0 = df["ts"].min()
+    # 1일 초 환산: 86400
+    days = (df["ts"] - t0).dt.total_seconds() / 86400
+
+    # CNC-02 온도 센서만 서서히 밀림 설정 (센서 드리프트)
+    m2 = df["machine_id"] == "CNC-02"
+    df.loc[m2, "process_temp_k"] += c["drift_per_day"] * days[m2]
+
+    # 단위 혼재 설정
+    n = len(df)
+    unit_block = np.zeros(n, dtype=bool)
+    n_block = max(1, int(n * c["unit_mix_rate"] / 200))
+    for _ in range(n_block):
+        s = rng.integers(0, n - 200)
+        unit_block[s : s + 200] = True
+    df.loc[unit_block, "air_temp_k"] -= 273.15  # K -> 섭씨
+    df.loc[unit_block, "process_temp_k"] -= 273.15
+    masks["unit_temp"] = unit_block
+
+    vib_block = rng.random(n) < 0.04
+    df.loc[vib_block, "vibration_mms"] *= 9.81  # mm/s -> m/s² (중력가속도)
+    masks["unit_vib"] = vib_block
+
+    # 스파이크 (센서가 튀는 현상)
+    for col in SENSOR_COLS:
+        hit = rng.random(n) < c["spike_rate"]
+        mode = rng.random(n)
+
+        # 절반은 8~40배 치솟는 현상
+        df.loc[hit & (mode < 0.5), col] = df.loc[hit & (mode < 0.5), col] * rng.uniform(
+            8, 40
+        )
+
+        # 절반은 0으로 떨어짐 (신호 유실)
+        df.loc[hit & (mode >= 0.5), col] = 0.0
+        masks[f"spike_{col}"] = hit
+
+    # 값만 NaN (개별 결측)
+    for col in SENSOR_COLS:
+        hit = rng.random(n) < c["nan_rate"]
+        df.loc[hit, col] = np.nan
+        masks[f"nan_{col}"] = hit
+
+    # 행 자체가 사라짐 - 구간으로 (통신 끊김)
+    # 사라진 요소들 전부 0으로 초기화
+    drop_mask = np.zeros(n, dtype=bool)
+    n_drop = int(n * c["dropout_rate"] / 10)
+    for _ in range(max(1, n_drop)):
+        s = rng.integers(0, n)
+        ln = rng.integers(*c["dropout_len"]) * 3  # 설비 3대 x 분
+        drop_mask[s : s + ln] = True
+    # 0이 아닌 행들을 담는 변수
+    keep = ~drop_mask
+    df = df[keep].copy()
