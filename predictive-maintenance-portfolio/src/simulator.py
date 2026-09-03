@@ -348,3 +348,27 @@ print(inj.to_string())
 
 
 # 실시간 수집용 함수 (지금부터 n분 치 기록)
+def sample_window(
+    n_minutes: int = 60,
+    end: pd.Timestamp | None = None,
+    seed: int | None = None,
+) -> pd.DataFrame:
+    # 수집기가 호출하는 함수, 최근 n분 구간의 관측 데이터 return용
+    end = pd.DataFrame.floor("min") if end is None else pd.Timestamp(end)
+    start = end - pd.Timedelta(minutes=n_minutes)
+    # 시드를 날짜에서 뽑으면 같은 날 다시 돌려도 같은 값이 발생 (재현성)
+    if seed is None:
+        # seed에 값이 없으면 시작 시간을 정수로 변환하여 담기
+        seed = int(start.strftime("%Y%m%d%H"))
+    truth = simulate_truth(n_minutes=n_minutes, start=start, seed=seed)
+    obs = pollute(truth, seed=seed + 1)
+    obs["collected_at"] = pd.Timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    return obs
+
+
+if __name__ == "__main__":
+    t = simulate_truth(n_minutes=1440, start="2026-09-01", seed=42)
+    o = pollute(t, seed=7)
+    print("Truth:", t.shape)
+    print("observed:", o.shape)
+    print(o.head(3).to_string())
