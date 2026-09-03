@@ -33,7 +33,11 @@ POLLUTION = {
 
 
 def _simulate_one(
-    machine_id: str, n_minutes: int, start: pd.Timestamp, rng: np.random.Generator
+    # rng: np.random.Generator => 'np.random.default_rng(seed=42)'으로 값 전달
+    machine_id: str,
+    n_minutes: int,
+    start: pd.Timestamp,
+    rng: np.random.Generator,
 ) -> pd.DataFrame:
     spec = MACHINES[machine_id]  # 설비 스펙
     ts = pd.date_range(start, periods=n_minutes, freq="min")
@@ -118,11 +122,17 @@ def _simulate_one(
     # ------------------------------------------------------------------
     # 고장 라벨 (AI4I 2020 정의 그대로)
     # ------------------------------------------------------------------
+
+    # Tool Wear Failure (공구 마모 고장)
     twf = (wear >= 200) & (wear <= 240) & (rng.random(n_minutes) < 0.004)
+    # Heat Dissipation Failure (방열 실패)
     hdf = ((proc - air) < 8.6) & (rpm < 1380)
+    # Power Failure (전력 이상)
     pwf = (power_w < 3500) | (power_w > 9000)
+    # Overstrain Failure (과부하)
     osf = (wear * torque) > spec["osf_limit"]
-    rnf = rng.random(n_minutes) < 0.0002  # 원인 불명 랜덤 고장
+    # Random Failure (원인 불명)
+    rnf = rng.random(n_minutes) < 0.0002
 
     df["twf"] = twf.astype(int)
     df["hdf"] = hdf.astype(int)
@@ -149,4 +159,44 @@ def simulate_truth(
     return out.sort_values(["ts", "machine_id"]).reset_index(drop=True)
 
 
-print(_simulate_one("CNC-01", 1440, "2026-09-02 12:00", np.random.default_rng(seed=7)))
+# print(
+#     _simulate_one(
+#         # 3개월 (90일) 단위로 시뮬레이션 체크
+#         "CNC-01",
+#         1440 * 90,
+#         "2026-09-02 12:00",
+#         np.random.default_rng(seed=42),
+#     )
+# )
+
+# 14일치 샘플
+truth = simulate_truth(n_minutes=1440 * 14, start="2024-01-01", seed=42)
+print("설비 수 :", truth["machine_id"].nunique())
+print("기간 :", truth["ts"].min(), "~", truth["ts"].max())
+print("행 수 :", f"{len(truth):,}")
+print()
+
+# 고장 모드 분포
+modes = truth[["twf", "hdf", "pwf", "osf", "rnf", "machine_failure"]].sum()
+print(pd.DataFrame({"건수": modes, "비율(%)": (modes / len(truth) * 100).round(3)}))
+print()
+
+# 센서 요약
+cols = [
+    "air_temp_k",
+    "process_temp_k",
+    "rot_speed_rpm",
+    "torque_nm",
+    "tool_wear_min",
+    "vibration_mms",
+    "current_a",
+    "power_w",
+]
+print(truth[cols].describe().loc[["mean", "std", "min", "50%", "max"]].round(2))
+
+# pd.date_range("2024-01-01", periods=10, freq="T")
+# => FutureWarning: 'T' is deprecated and will be removed in a future version, please use 'min' instead.
+# => "'T'라는 표기는 지금은 쓸 수 있지만 앞으로 사라질 예정(deprecated)이다. 'min'으로 바꿔서 써라."
+
+pd.date_range("2024-01-01", periods=10, freq="min")
+# => pandas 최신 버전 적용
