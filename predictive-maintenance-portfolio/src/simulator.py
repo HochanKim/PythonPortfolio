@@ -9,6 +9,7 @@ CNC 밀링 설비 3대를 1분 단위로 시뮬레이션합니다
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+import streamlit as st
 
 # CNC 밀링 설비 3대 정보
 MACHINES = {
@@ -194,7 +195,7 @@ cols = [
     "power_w",
 ]
 print(truth[cols].describe().loc[["mean", "std", "min", "50%", "max"]].round(2))
-
+print()
 # pd.date_range("2024-01-01", periods=10, freq="T")
 # => FutureWarning: 'T' is deprecated and will be removed in a future version, please use 'min' instead.
 # => "'T'라는 표기는 지금은 쓸 수 있지만 앞으로 사라질 예정(deprecated)이다. 'min'으로 바꿔서 써라."
@@ -217,25 +218,29 @@ SENSOR_COLS = [
 
 # 오염 데이터용 함수
 def pollute(truth, seed=7, cfg=None, return_masks=False):
+    # 오염 딕셔너리 담기
     c = dict(POLLUTION)
     if cfg:
         c.update(cfg)
+    # 난수 시드
     rng = np.random.default_rng(seed)
+    # 파라미터로 받은 DF를 복사 후 저장
     df = truth.copy()
-    masks = pd.DataFrame(index=df.index)  # 주입 정답지
+    # 주입 정답지
+    masks = pd.DataFrame(index=df.index)
 
     # 현장에서도 세부 고장코드는 정비 후에 붙는다
-    df = df.droop(columns=["twf", "hdf", "pwf", "osf", "rnf", "power_w"])
+    df = df.drop(columns=["twf", "hdf", "pwf", "osf", "rnf", "power_w"])
 
     t0 = df["ts"].min()
     # 1일 초 환산: 86400
     days = (df["ts"] - t0).dt.total_seconds() / 86400
 
-    # CNC-02 온도 센서만 서서히 밀림 설정 (센서 드리프트)
+    # (a) CNC-02 온도 센서만 서서히 밀림 설정 (센서 드리프트)
     m2 = df["machine_id"] == "CNC-02"
     df.loc[m2, "process_temp_k"] += c["drift_per_day"] * days[m2]
 
-    # 단위 혼재 설정
+    # (b) 단위 혼재 설정
     n = len(df)
     unit_block = np.zeros(n, dtype=bool)
     n_block = max(1, int(n * c["unit_mix_rate"] / 200))
@@ -250,7 +255,7 @@ def pollute(truth, seed=7, cfg=None, return_masks=False):
     df.loc[vib_block, "vibration_mms"] *= 9.81  # mm/s -> m/s² (중력가속도)
     masks["unit_vib"] = vib_block
 
-    # 스파이크 (센서가 튀는 현상)
+    # (c) 스파이크 (센서가 튀는 현상)
     for col in SENSOR_COLS:
         hit = rng.random(n) < c["spike_rate"]
         mode = rng.random(n)
@@ -264,13 +269,13 @@ def pollute(truth, seed=7, cfg=None, return_masks=False):
         df.loc[hit & (mode >= 0.5), col] = 0.0
         masks[f"spike_{col}"] = hit
 
-    # 값만 NaN (개별 결측)
+    # (d) 값만 NaN (개별 결측)
     for col in SENSOR_COLS:
         hit = rng.random(n) < c["nan_rate"]
         df.loc[hit, col] = np.nan
         masks[f"nan_{col}"] = hit
 
-    # 행 자체가 사라짐 - 구간으로 (통신 끊김)
+    # (e) 행 자체가 사라짐 - 구간으로 (통신 끊김)
     # 사라진 요소들 전부 0으로 초기화
     drop_mask = np.zeros(n, dtype=bool)
     n_drop = int(n * c["dropout_rate"] / 10)
@@ -278,6 +283,68 @@ def pollute(truth, seed=7, cfg=None, return_masks=False):
         s = rng.integers(0, n)
         ln = rng.integers(*c["dropout_len"]) * 3  # 설비 3대 x 분
         drop_mask[s : s + ln] = True
+    masks["dropped"] = drop_mask
     # 0이 아닌 행들을 담는 변수
     keep = ~drop_mask
     df = df[keep].copy()
+    kept_masks = masks[keep].copy()
+
+    # (f) 중복 전송
+    dup_idx = rng.random(len(df)) < c["dup_rate"]
+    dups = df[dup_idx].copy()
+    df = pd.concat([df, dups], ignore_index=True)
+
+    # (g) 타임스탬프 -> 초 단위로 흔들리고 뒤섞인 순서
+    n3 = len(df)  # 데이터프레임의 길이
+    jitter = np.where(
+        rng.random(n3) < c["ts_jitter_rate"], rng.integers(-90, 90, n3), 0
+    )
+    df["ts"] = df["ts"] + pd.to_timedelta(jitter, unit="s")
+    order = rng.permutation(n3)
+    df = df.iloc[order].reset_index(drop=True)
+
+    # (h) 수집기가 붙이는 메타 컬럼 (ts는 문자열로)
+    # => API, CSV로 받는 데이터는 '문자열'로 받기 때문에
+    df["collected_at"] = pd.Timestamp("2026-09-01")
+    df["ts"] = df["ts"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    if return_masks:
+        return df, kept_masks
+    return df
+
+
+observed_심함 = pollute(
+    truth,
+    seed=7,
+    cfg={
+        "nan_rate": 0.05,
+        "dropout_rate": 0.03,
+    },  # 결측·통신끊김 비율을 기본값보다 높임
+)
+observed, masks = pollute(truth, seed=7, return_masks=True)
+print(masks.columns.tolist())
+print()
+
+obs, masks = pollute(truth, seed=7, return_masks=True)
+print("참값 행수 :", f"{len(truth):,}")
+print("관측 행수 :", f"{len(obs):,}", f"({len(obs) - len(truth):+,})")
+print()
+
+# 데이터프레임 obs의 상위 3행
+print(obs.head(3).to_string())
+print()
+
+# 결측률
+print((obs.isna().mean() * 100).round(2).to_string())
+print()
+
+# 단위 혼재 흔적
+print(obs["air_temp_k"].describe().round(2).to_string())
+print("200 K 미만 비율: %.2f%%" % ((obs["air_temp_k"] < 200).mean() * 100))
+print()
+
+# 주입 정답지
+inj = pd.DataFrame({"건수": masks.sum(), "비율(%)": (masks.mean() * 100).round(3)})
+print(inj.to_string())
+
+
+# 실시간 수집용 함수 (지금부터 n분 치 기록)
