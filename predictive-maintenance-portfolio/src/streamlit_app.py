@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import fonts
 
 # ============================================================
 # 시뮬레이션 로직 (기존 코드 그대로 + rng.integer 오타를 rng.integers로 수정)

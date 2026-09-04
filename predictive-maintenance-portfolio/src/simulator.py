@@ -150,7 +150,7 @@ def _simulate_one(
 def simulate_truth(
     # 시뮬레이션 총 분, 시작하는 날(시각), 난수 시드
     n_minutes: int = 1440,
-    start: str | pd.Timestamp = "2026-09-02",
+    start: str | pd.Timestamp = "2026-09-01",
     seed: int = 42,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
@@ -172,7 +172,7 @@ def simulate_truth(
 # )
 
 # 14일치 샘플
-truth = simulate_truth(n_minutes=1440 * 14, start="2024-01-01", seed=42)
+truth = simulate_truth(n_minutes=1440 * 14, start="2026-09-01", seed=42)
 print("설비 수 :", truth["machine_id"].nunique())
 print("기간 :", truth["ts"].min(), "~", truth["ts"].max())
 print("행 수 :", f"{len(truth):,}")
@@ -200,7 +200,7 @@ print()
 # => FutureWarning: 'T' is deprecated and will be removed in a future version, please use 'min' instead.
 # => "'T'라는 표기는 지금은 쓸 수 있지만 앞으로 사라질 예정(deprecated)이다. 'min'으로 바꿔서 써라."
 
-pd.date_range("2024-01-01", periods=10, freq="min")
+pd.date_range("2026-09-01", periods=10, freq="min")
 # => pandas 최신 버전 적용
 
 # 실제 현장급 오염 주입
