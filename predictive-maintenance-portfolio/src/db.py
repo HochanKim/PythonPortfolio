@@ -116,8 +116,22 @@ def read_all(con: sqlite3.Connection) -> pd.DataFrame:
     return pd.read_sql_query("SELECT * FROM sensor_raw ORDER BY ts, machine_id", con)
 
 
-# DB 파일 생성
+# csv 파일 내보내기
 from pathlib import Path
 
 print(Path(__file__).resolve())
 print(Path(__file__).resolve().parents[1])
+
+
+# 파일 맨 아래(또는 별도 파일)에 추가해서 직접 확인
+if __name__ == "__main__":
+    print("DB 경로:", DB_PATH)
+    con = connect()
+    print("연결 및 생성 완료. 실제 파일 존재?", DB_PATH.exists())
+
+# DB 파일 가져오기
+con = connect("data/sensors.db")
+df = read_all(con)
+print(df)
+
+# df.to_csv("db_확인용.csv", index=False, encoding="utf-8-sig")
