@@ -63,3 +63,26 @@ def main() -> int:
 
     # 같은 날 여러번 돌아도 안전하게
     # => 기존 파일과 합쳐서 중복 제거
+    if csv_path.exists():
+        old = pd.read_csv(csv_path)
+        raw = pd.concat([old, raw], ignore_index=True)
+    raw = raw.drop_duplicates(subset=["machine_id", "ts"], keep="last")
+    raw.to_csv(csv_path, index=False)
+
+    con = dbmod.connect(args.db)
+    inserted, skipped = dbmod.upsert(con, raw)
+    dbmod.log_run(
+        con, w_start, w_end, len(raw), inserted, skipped, note=f"csv={csv_path.name}"
+    )
+    total = con.execute("SELECT COUNT(*) FROM sensor_raw").fetchone()[0]
+    con.close()
+
+    print(f"[OK] window {w_start} ~ {w_end}")
+    print(f"     받은 행 {len(raw):,} / DB 신규 {inserted:,} / 중복 스킵 {skipped:,}")
+    print(f"     CSV  {csv_path}")
+    print(f"     DB 누적 {total:,}행")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

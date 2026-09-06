@@ -107,17 +107,17 @@ def _simulate_one(
 
     df = pd.DataFrame(
         {
-            "ts": ts,
-            "machine_id": machine_id,
-            "type": spec["type"],
-            "air_temp_k": air,
-            "process_temp_k": proc,
-            "rot_speed_rpm": rpm,
-            "torque_nm": torque,
-            "tool_wear_min": wear,
-            "vibration_mms": vib,
-            "current_a": current,
-            "humidity_pct": humid,
+            "ts": ts,  # 측정 시각 (1분 간격 타임스탬프)
+            "machine_id": machine_id,  # 설비 번호
+            "type": spec["type"],  # 설비 품질등급
+            "air_temp_k": air,  # 주변 공기 온도 (단위: 켈빈(K))
+            "process_temp_k": proc,  # 절삭 공정 중 온도
+            "rot_speed_rpm": rpm,  # 주축 회전수
+            "torque_nm": torque,  # 절삭 토크(회전력)
+            "tool_wear_min": wear,  # 공구 누적 마모시간 (=> 교최되면 0으로 리셋)
+            "vibration_mms": vib,  # 진동 크기
+            "current_a": current,  # 모터 소비 전류
+            "humidity_pct": humid,  # 습도
         }
     )
 
@@ -185,14 +185,14 @@ print()
 
 # 센서 요약
 cols = [
-    "air_temp_k",
-    "process_temp_k",
-    "rot_speed_rpm",
-    "torque_nm",
-    "tool_wear_min",
-    "vibration_mms",
-    "current_a",
-    "power_w",
+    "air_temp_k",  # 설비 주변 기온
+    "process_temp_k",  # 절삭 공정 중 기온
+    "rot_speed_rpm",  # 주축 회전수
+    "torque_nm",  # 절삭 토크(회전력)
+    "tool_wear_min",  # 공구 누적 마모 시간
+    "vibration_mms",  # 진동 크기
+    "current_a",  # 모터 소비 전류
+    "power_w",  # 모터 출력(소비) 동력
 ]
 print(truth[cols].describe().loc[["mean", "std", "min", "50%", "max"]].round(2))
 print()
@@ -205,14 +205,14 @@ pd.date_range("2026-09-01", periods=10, freq="min")
 
 # 실제 현장급 오염 주입
 SENSOR_COLS = [
-    "air_temp_k",
-    "process_temp_k",
-    "rot_speed_rpm",
-    "torque_nm",
-    "tool_wear_min",
-    "vibration_mms",
-    "current_a",
-    "humidity_pct",
+    "air_temp_k",  # 설비 주변 기온
+    "process_temp_k",  # 절삭 공정 중 기온
+    "rot_speed_rpm",  # 주축 회전수
+    "torque_nm",  # 절삭 토크(회전력)
+    "tool_wear_min",  # 공구 누적 마모 시간
+    "vibration_mms",  # 진동 크기
+    "current_a",  # 모터 소비 전류
+    "humidity_pct",  # 습도
 ]
 
 
@@ -354,7 +354,7 @@ def sample_window(
     seed: int | None = None,
 ) -> pd.DataFrame:
     # 수집기가 호출하는 함수, 최근 n분 구간의 관측 데이터 return용
-    end = pd.DataFrame.floor("min") if end is None else pd.Timestamp(end)
+    end = pd.Timestamp.now().floor("min") if end is None else pd.Timestamp(end)
     start = end - pd.Timedelta(minutes=n_minutes)
     # 시드를 날짜에서 뽑으면 같은 날 다시 돌려도 같은 값이 발생 (재현성)
     if seed is None:
@@ -362,13 +362,13 @@ def sample_window(
         seed = int(start.strftime("%Y%m%d%H"))
     truth = simulate_truth(n_minutes=n_minutes, start=start, seed=seed)
     obs = pollute(truth, seed=seed + 1)
-    obs["collected_at"] = pd.Timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    obs["collected_at"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     return obs
 
 
 if __name__ == "__main__":
-    t = simulate_truth(n_minutes=1440, start="2026-09-01", seed=42)
-    o = pollute(t, seed=7)
-    print("Truth:", t.shape)
-    print("observed:", o.shape)
-    print(o.head(3).to_string())
+    t = simulate_truth(n_minutes=1440, start="2026-09-01", seed=42)  # 하루치 참값 생성
+    o = pollute(t, seed=7)  # 참값 데이터들의 오염 작업
+    print("Truth:", t.shape)  # 참값의 (행, 열) 모양 확인
+    print("observed:", o.shape)  # 오염된 데이터의 (행, 열) 모양 확인
+    print(o.head(3).to_string())  # 오염된 데이터 상위 3행 출력
