@@ -6,6 +6,15 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import fonts
 
+# ↓↓↓ 디버그용 임시 코드 (확인 후 지워도 됨)
+st.write("폰트 파일 존재?", fonts.FONT_PATH.exists())
+st.write(
+    "폰트 파일 크기(바이트):",
+    fonts.FONT_PATH.stat().st_size if fonts.FONT_PATH.exists() else "없음",
+)
+st.write("적용된 font.family:", plt.rcParams["font.family"])
+
+
 # ============================================================
 # 시뮬레이션 로직 (기존 코드 그대로 + rng.integer 오타를 rng.integers로 수정)
 # ============================================================
