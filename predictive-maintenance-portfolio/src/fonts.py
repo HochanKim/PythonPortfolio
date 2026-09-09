@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 # 이 파일(fonts.py) 기준으로 fonts/ 폴더 안의 폰트 파일 경로를 찾음
-FONT_PATH = Path(__file__).parent / "fonts" / "NanumGothic.ttf"
+FONT_PATH = Path(__file__).parent / "fonts" / "NanumGothic-ExtraBold.ttf"
 
 if FONT_PATH.exists():
     # 1) 폰트 파일을 matplotlib의 폰트 매니저에 직접 등록
@@ -19,6 +19,8 @@ else:
             plt.rcParams["font.family"] = cand
             break
     else:
-        print("[WARN] 한글 폰트를 찾지 못했습니다. fonts/NanumGothic.ttf를 추가해주세요.")
+        print(
+            "[WARN] 한글 폰트를 찾지 못했습니다. fonts/NanumGothic.ttf를 추가해주세요."
+        )
 
 plt.rcParams["axes.unicode_minus"] = False  # 마이너스 기호 깨짐 방지
