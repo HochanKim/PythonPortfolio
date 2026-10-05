@@ -220,7 +220,7 @@ st.subheader(f"{select_machine} 일별 평균 추이")
 
 # 날짜별 평균값을 선 그래프로 표시
 avg_of_days_long = avg_of_days.reset_index().melt(
-    id_vars="날짜", var_name="지표", value_name="값"
+    id_vars="날짜", var_name="지표", value_name="온도(K)"
 )
 
 chart = (
