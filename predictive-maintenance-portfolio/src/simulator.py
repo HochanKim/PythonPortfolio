@@ -247,7 +247,7 @@ def pollute(truth, seed=7, cfg=None, return_masks=False):
     for _ in range(n_block):
         s = rng.integers(0, n - 200)
         unit_block[s : s + 200] = True
-    df.loc[unit_block, "air_temp_k"] -= 273.15  # K -> 섭씨
+    df.loc[unit_block, "air_temp_k"] -= 273.15  # K(켈빈) 온도 -> 섭씨 온도
     df.loc[unit_block, "process_temp_k"] -= 273.15
     masks["unit_temp"] = unit_block
 
@@ -312,7 +312,7 @@ def pollute(truth, seed=7, cfg=None, return_masks=False):
     return df
 
 
-observed_심함 = pollute(
+observed_strong = pollute(
     truth,
     seed=7,
     cfg={
